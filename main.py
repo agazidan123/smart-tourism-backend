@@ -32,6 +32,11 @@ import os
 from fastapi import Path
 
 load_dotenv()
+GOOGLE_CLIENT_ID = "283658671779-1lsmm0ov0p3ds1hfmml9jfumuns8ada6.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "GGOCSPX-eSq4ZRGKY64vAb3AoS6HEdPU1TXb"
+GMAIL_USER = "zidan.zidan.zidan.1994@gmail.com"
+GMAIL_PASSWORD = "ozvg fjef wbhp hiax"
+REDIRECT_URI = "https://zoz-rwob.onrender.com/auth/google/callback"
 
 app = FastAPI()
 
@@ -531,16 +536,6 @@ def get_db():
     finally:
         db.close()
 
-config = Config(".env")
-GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = config("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = "https://zoz-rwob.onrender.com/auth/google/callback/auth/google/callback"
-
-GMAIL_USER = config("GMAIL_USER")
-GMAIL_PASSWORD = config("GMAIL_PASSWORD")
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-
 def send_email(subject, message, recipient):
     try:
         msg = MIMEMultipart()
@@ -561,7 +556,7 @@ def send_email(subject, message, recipient):
     except Exception as e:
         print('Failed to send email:', str(e))
 
-
+# المسار للموافقة على المصادقة عبر جوجل
 @app.get("/auth/google")
 def auth_google():
     google_auth_endpoint = "https://accounts.google.com/o/oauth2/auth"
@@ -577,6 +572,7 @@ def auth_google():
 
     return RedirectResponse(url=f"{google_auth_endpoint}?{urlencode(query_params)}")
 
+# المسار الذي يتم استدعاؤه بعد تفويض المصادقة عبر جوجل
 @app.get("/auth/google/callback")
 async def auth_google_callback(request: Request, background_tasks: BackgroundTasks):
     code = request.query_params.get("code")
@@ -603,7 +599,7 @@ async def auth_google_callback(request: Request, background_tasks: BackgroundTas
 
     access_token = token_json.get("access_token")
 
-    # Use the access token to get user info from Google
+    # استخدم الرمز للحصول على معلومات المستخدم من جوجل
     user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"
     headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -618,6 +614,7 @@ async def auth_google_callback(request: Request, background_tasks: BackgroundTas
     if not user_email:
         raise HTTPException(status_code=400, detail="Failed to retrieve necessary user information from Google")
 
+    # قم بفحص ما إذا كان المستخدم مسجل بالفعل أم لا
     conn = engine.connect()
     query = select(users.c.user_email).where(users.c.user_email == user_email)
     result = conn.execute(query).fetchone()
