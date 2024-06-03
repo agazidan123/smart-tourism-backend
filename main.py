@@ -28,7 +28,7 @@ from fastapi.exceptions import RequestValidationError
 import re
 from starlette.middleware.sessions import SessionMiddleware
 import os
-
+import jwt
 load_dotenv()
 
 app = FastAPI()
