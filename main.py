@@ -29,6 +29,7 @@ from fastapi.exceptions import RequestValidationError
 import re
 from starlette.middleware.sessions import SessionMiddleware
 import os
+from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -223,6 +224,7 @@ def update_user(user_email: str, updated_user: UserUpdate):
 
 
 UTC = timezone.utc
+ACCESS_TOKEN_EXPIRE_MINUTES = 30 
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
