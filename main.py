@@ -28,8 +28,8 @@ from fastapi.exceptions import RequestValidationError
 import re
 from starlette.middleware.sessions import SessionMiddleware
 import os
-from jwt import decode as jwt_decode
-from jwt import encode as jwt_encode
+from jwt.encode import encode as jwt_encode
+from jwt.decode import decode as jwt_decode
 from jwt.exceptions import PyJWTError
 load_dotenv()
 
