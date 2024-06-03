@@ -28,8 +28,8 @@ from fastapi.exceptions import RequestValidationError
 import re
 from starlette.middleware.sessions import SessionMiddleware
 import os
-import jwt
-load_dotenv()
+from jwt import encode as jwt_encode, decode as jwt_decode
+from jwt.exceptions import PyJWTErrorload_dotenv()
 
 app = FastAPI()
 
@@ -224,28 +224,27 @@ def update_user(user_email: str, updated_user: UserUpdate):
 UTC = timezone.utc
 
 def create_access_token(data: dict):
-encoded_jwt = jwt.encode(payload, secret_key, algorithm=algorithm)
+    encoded_jwt = jwt_encode(data, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
-
 
 def get_user_from_token(token: str):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt_decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_email = payload.get("sub")
         if user_email is None:
             return None
         return user_email
-    except jwt.JWTError:
+    except PyJWTError:  # Use PyJWTError for exception handling
         return None
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt_decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_email = payload.get("sub")
         if user_email is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
         return user_email
-    except jwt.JWTError:
+    except PyJWTError:  # Use PyJWTError for exception handling
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
