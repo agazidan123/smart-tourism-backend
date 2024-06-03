@@ -222,10 +222,9 @@ def update_user(user_email: str, updated_user: UserUpdate):
 
 
 UTC = timezone.utc
-from PyJWT import jwt
 
 def create_access_token(data: dict):
-    encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
+encoded_jwt = jwt.encode(payload, secret_key, algorithm=algorithm)
     return encoded_jwt
 
 
