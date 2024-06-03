@@ -8,7 +8,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from typing import List, Optional
 from datetime import timezone
-import jwt
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
 from fastapi_session import Session
@@ -29,7 +28,6 @@ from fastapi.exceptions import RequestValidationError
 import re
 from starlette.middleware.sessions import SessionMiddleware
 import os
-from datetime import datetime, timedelta
 
 load_dotenv()
 
@@ -224,24 +222,12 @@ def update_user(user_email: str, updated_user: UserUpdate):
 
 
 UTC = timezone.utc
-ACCESS_TOKEN_EXPIRE_MINUTES = 30 
+import jwt
+
 def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-def decode_access_token(token: str):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
-    except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
 
 def get_user_from_token(token: str):
     try:
@@ -307,7 +293,6 @@ async def login(user: UserLogin):
 
     access_token = create_access_token(data={"sub": user_email})
     return {"access_token": access_token, "token_type": "bearer", "message": "Login successful"}
-
 
 
 @app.delete("/delete")
@@ -776,17 +761,14 @@ def create_favorite(db: Session, user_id: int, type: str, name: str, location: s
         db.refresh(db_favorite)
         return db_favorite
 
-def delete_favorite(db: Session, name: str):
-    db_favorite = db.query(Favorite).filter(Favorite.name == name).first()
-    if db_favorite:
-        db.delete(db_favorite)
-        db.commit()
-        return {"message": "Favorite deleted successfully"}
-    else:
-        raise HTTPException(status_code=404, detail="Favorite not found")
-
-# Database session setup
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def delete_favorite(db: Session, fav_id: int):
+        db_favorite = db.query(Favorite).filter(Favorite.fav_id == fav_id).first()
+        if db_favorite:
+            db.delete(db_favorite)
+            db.commit()
+            return {"message": "Favorite deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Favorite not found")
 
 # Database session setup
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -971,17 +953,17 @@ def create_favorite_endpoint(
 
 @app.delete("/favorites/")
 def delete_favorite_endpoint(
-    name: str,
+    fav_id: int,
     current_user_email: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Delete a favorite for the current user using the favorite name.
+    Delete a favorite for the current user.
     """
     try:
         user = db.query(User).filter(User.user_email == current_user_email).first()
         if user:
-            result = delete_favorite(db=db, name=name)
+            result = delete_favorite(db=db, fav_id=fav_id)
             return result
         else:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1182,7 +1164,6 @@ async def get_discover_hotels(country: str, db: Session = Depends(get_db)):
     ]
 
     return {"random_hotels": result}
-
 
 def main():
     import uvicorn
