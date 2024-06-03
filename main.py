@@ -29,7 +29,8 @@ import re
 from starlette.middleware.sessions import SessionMiddleware
 import os
 from jwt import encode as jwt_encode, decode as jwt_decode
-from jwt.exceptions import PyJWTErrorload_dotenv()
+from jwt.exceptions import PyJWTError
+load_dotenv()
 
 app = FastAPI()
 
