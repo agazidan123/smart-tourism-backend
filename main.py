@@ -29,14 +29,8 @@ from fastapi.exceptions import RequestValidationError
 import re
 from starlette.middleware.sessions import SessionMiddleware
 import os
-from fastapi import Path
 
 load_dotenv()
-GOOGLE_CLIENT_ID = "283658671779-1lsmm0ov0p3ds1hfmml9jfumuns8ada6.apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET = "GGOCSPX-eSq4ZRGKY64vAb3AoS6HEdPU1TXb"
-GMAIL_USER = "zidan.zidan.zidan.1994@gmail.com"
-GMAIL_PASSWORD = "ozvg fjef wbhp hiax"
-REDIRECT_URI = "https://zoz-rwob.onrender.com/auth/google/callback"
 
 app = FastAPI()
 
@@ -299,6 +293,7 @@ async def login(user: UserLogin):
     return {"access_token": access_token, "token_type": "bearer", "message": "Login successful"}
 
 
+
 @app.delete("/delete")
 async def delete(current_user: str = Depends(get_current_user)):
     delete_user(current_user)
@@ -536,6 +531,16 @@ def get_db():
     finally:
         db.close()
 
+config = Config(".env")
+GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = config("GOOGLE_CLIENT_SECRET")
+REDIRECT_URI = "http://localhost:8000/auth/google/callback"
+
+GMAIL_USER = config("GMAIL_USER")
+GMAIL_PASSWORD = config("GMAIL_PASSWORD")
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
 def send_email(subject, message, recipient):
     try:
         msg = MIMEMultipart()
@@ -556,7 +561,7 @@ def send_email(subject, message, recipient):
     except Exception as e:
         print('Failed to send email:', str(e))
 
-# المسار للموافقة على المصادقة عبر جوجل
+
 @app.get("/auth/google")
 def auth_google():
     google_auth_endpoint = "https://accounts.google.com/o/oauth2/auth"
@@ -572,7 +577,6 @@ def auth_google():
 
     return RedirectResponse(url=f"{google_auth_endpoint}?{urlencode(query_params)}")
 
-# المسار الذي يتم استدعاؤه بعد تفويض المصادقة عبر جوجل
 @app.get("/auth/google/callback")
 async def auth_google_callback(request: Request, background_tasks: BackgroundTasks):
     code = request.query_params.get("code")
@@ -599,7 +603,7 @@ async def auth_google_callback(request: Request, background_tasks: BackgroundTas
 
     access_token = token_json.get("access_token")
 
-    # استخدم الرمز للحصول على معلومات المستخدم من جوجل
+    # Use the access token to get user info from Google
     user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"
     headers = {"Authorization": f"Bearer {access_token}"}
 
@@ -614,7 +618,6 @@ async def auth_google_callback(request: Request, background_tasks: BackgroundTas
     if not user_email:
         raise HTTPException(status_code=400, detail="Failed to retrieve necessary user information from Google")
 
-    # قم بفحص ما إذا كان المستخدم مسجل بالفعل أم لا
     conn = engine.connect()
     query = select(users.c.user_email).where(users.c.user_email == user_email)
     result = conn.execute(query).fetchone()
@@ -765,6 +768,9 @@ def delete_favorite(db: Session, name: str):
         return {"message": "Favorite deleted successfully"}
     else:
         raise HTTPException(status_code=404, detail="Favorite not found")
+
+# Database session setup
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Database session setup
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -947,10 +953,9 @@ def create_favorite_endpoint(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create favorite: {e}")
 
-
-@app.delete("/favorites/{name}")
+@app.delete("/favorites/")
 def delete_favorite_endpoint(
-    name: str = Path(..., title="Name of the favorite place"),
+    name: str,
     current_user_email: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -966,7 +971,6 @@ def delete_favorite_endpoint(
             raise HTTPException(status_code=404, detail="User not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete favorite: {e}")
-
 
 
 # -------------------------------------------------------------------------
@@ -1162,11 +1166,3 @@ async def get_discover_hotels(country: str, db: Session = Depends(get_db)):
     ]
 
     return {"random_hotels": result}
-
-def main():
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-if __name__ == "__main__":
-    main()
