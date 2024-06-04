@@ -225,7 +225,7 @@ def update_user(user_email: str, updated_user: UserUpdate):
 
 UTC = timezone.utc
 def create_access_token(data: dict):
-encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM).decode('utf-8')
+encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 def get_user_from_token(token: str):
