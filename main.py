@@ -224,19 +224,26 @@ def update_user(user_email: str, updated_user: UserUpdate):
 
 
 UTC = timezone.utc
+from itsdangerous import TimedJSONWebSignatureSerializer as Serializer, BadSignature, SignatureExpired
+
 def create_access_token(data: dict):
-encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+    serializer = Serializer(SECRET_KEY, expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60)
+    token = serializer.dumps(data).decode('utf-8')
+    return token
 
 def get_user_from_token(token: str):
+    serializer = Serializer(SECRET_KEY)
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])  # تعديل لاستعمال pyjwt
-        user_email = payload.get("sub")
-        if user_email is None:
-            return None
+        data = serializer.loads(token)
+        user_email = data.get('sub')
         return user_email
-    except jwt.PyJWTError:
+    except SignatureExpired:
+        # Token has expired
         return None
+    except BadSignature:
+        # Token is invalid
+        return None
+
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
     user_email = get_user_from_token(token)
