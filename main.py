@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from typing import List, Optional
 from datetime import timezone
+import jwt
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.ext.declarative import declarative_base
 from fastapi_session import Session
@@ -28,9 +29,8 @@ from fastapi.exceptions import RequestValidationError
 import re
 from starlette.middleware.sessions import SessionMiddleware
 import os
-from jwt.encode import encode as jwt_encode
-from jwt.decode import decode as jwt_decode
-from jwt.exceptions import PyJWTError
+from fastapi import Path
+
 load_dotenv()
 
 app = FastAPI()
@@ -224,30 +224,25 @@ def update_user(user_email: str, updated_user: UserUpdate):
 
 
 UTC = timezone.utc
-
 def create_access_token(data: dict):
-    encoded_jwt = jwt_encode(data, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(data, SECRET_KEY, algorithm=ALGORITHM)  
     return encoded_jwt
 
 def get_user_from_token(token: str):
     try:
-        payload = jwt_decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])  # تعديل لاستعمال pyjwt
         user_email = payload.get("sub")
         if user_email is None:
             return None
         return user_email
-    except jwt.JWTError:
+    except jwt.PyJWTError:
         return None
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt_decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_email = payload.get("sub")
-        if user_email is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        return user_email
-    except jwt.JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    user_email = get_user_from_token(token)
+    if user_email is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return user_email
 
 
 @app.post("/register")
@@ -535,7 +530,7 @@ def get_db():
 config = Config(".env")
 GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = config("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = "http://localhost:8000/auth/google/callback"
+REDIRECT_URI = "http://smart-tourism-mjyq.onrender.com/auth/google/callback"
 
 GMAIL_USER = config("GMAIL_USER")
 GMAIL_PASSWORD = config("GMAIL_PASSWORD")
@@ -761,14 +756,14 @@ def create_favorite(db: Session, user_id: int, type: str, name: str, location: s
         db.refresh(db_favorite)
         return db_favorite
 
-def delete_favorite(db: Session, fav_id: int):
-        db_favorite = db.query(Favorite).filter(Favorite.fav_id == fav_id).first()
-        if db_favorite:
-            db.delete(db_favorite)
-            db.commit()
-            return {"message": "Favorite deleted successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Favorite not found")
+def delete_favorite(db: Session, name: str):
+    db_favorite = db.query(Favorite).filter(Favorite.name == name).first()
+    if db_favorite:
+        db.delete(db_favorite)
+        db.commit()
+        return {"message": "Favorite deleted successfully"}
+    else:
+        raise HTTPException(status_code=404, detail="Favorite not found")
 
 # Database session setup
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -951,24 +946,26 @@ def create_favorite_endpoint(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to create favorite: {e}")
 
-@app.delete("/favorites/")
+
+@app.delete("/favorites/{name}")
 def delete_favorite_endpoint(
-    fav_id: int,
+    name: str = Path(..., title="Name of the favorite place"),
     current_user_email: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Delete a favorite for the current user.
+    Delete a favorite for the current user using the favorite name.
     """
     try:
         user = db.query(User).filter(User.user_email == current_user_email).first()
         if user:
-            result = delete_favorite(db=db, fav_id=fav_id)
+            result = delete_favorite(db=db, name=name)
             return result
         else:
             raise HTTPException(status_code=404, detail="User not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete favorite: {e}")
+
 
 
 # -------------------------------------------------------------------------
