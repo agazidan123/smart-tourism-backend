@@ -30,7 +30,8 @@ import re
 from starlette.middleware.sessions import SessionMiddleware
 import os
 from fastapi import Path
-
+import random
+import string
 load_dotenv()
 
 app = FastAPI()
@@ -539,6 +540,10 @@ GMAIL_USER = config("GMAIL_USER")
 GMAIL_PASSWORD = config("GMAIL_PASSWORD")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+def generate_password(length=16):
+    characters = string.ascii_letters + string.digits + string.punctuation
+    return ''.join(random.choice(characters) for _ in range(length))
 
 def send_email(subject, message, recipient):
     try:
