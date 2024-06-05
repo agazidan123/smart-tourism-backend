@@ -625,7 +625,7 @@ async def auth_google_callback(request: Request, background_tasks: BackgroundTas
         user = UserRegistration(
             first_name=first_name,
             last_name=last_name,
-            user_password=secrets.token_urlsafe(16),  # Generate a random password
+            user_password=secrets.token_urlsafe(16) + '@',  # Generate a random password
             user_email=user_email,
             user_location=None,
         )
