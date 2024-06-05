@@ -534,8 +534,7 @@ def get_db():
 config = Config(".env")
 GOOGLE_CLIENT_ID = config("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = config("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = "https://zoz-rwob.onrender.com/auth/google/callback"
-
+REDIRECT_URI = "http://localhost:8000/auth/google/callback"
 GMAIL_USER = config("GMAIL_USER")
 GMAIL_PASSWORD = config("GMAIL_PASSWORD")
 
