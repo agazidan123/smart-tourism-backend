@@ -794,7 +794,6 @@ class UserPlan(Base):
     user = relationship("User", back_populates="plans")
     plan = relationship("Plan", back_populates="users")
 
-# Define association tables
 plan_place = Table('plan_place', Base.metadata,
     Column('plan_id', Integer, ForeignKey('plans.plan_id')),
     Column('place_id', Integer, ForeignKey('places.place_id'))
@@ -862,6 +861,7 @@ def get_db():
         db.close()
 
 
+
 @app.post("/create_plan")
 async def create_plan(
         plan_data: PlanCreate,
@@ -919,7 +919,7 @@ async def create_plan(
         plan = Plan(
             plan_budget=plan_data.plan_budget,
             plan_duration=plan_data.plan_duration,
-            destination=destination
+            destination=destination,
         )
         db.add(plan)
         db.flush()
@@ -973,7 +973,7 @@ async def get_saved_plans(current_user: str = Depends(get_current_user), db: Ses
                 saved_plan = SavedPlanResponse(
                     plan_budget=user_plan.plan.plan_budget,
                     plan_duration=user_plan.plan.plan_duration,
-                    destination=user_plan.plan.destination
+                    destination=user_plan.plan.destination,
                 )
 
 
@@ -997,6 +997,7 @@ async def get_saved_plans(current_user: str = Depends(get_current_user), db: Ses
         raise HTTPException(status_code=500, detail=f"Failed to fetch user plans: {e}")
     finally:
         db.close()
+
 
 
 class FavoriteCreate(BaseModel):
@@ -1027,7 +1028,7 @@ def create_favorite_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to create favorite: {e}")
 
 
-@app.delete("/favorites/{name}")
+@app.delete("/favorites/")
 def delete_favorite_endpoint(
     name: str = Path(..., title="Name of the favorite place"),
     current_user_email: str = Depends(get_current_user),
