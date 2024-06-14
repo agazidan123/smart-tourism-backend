@@ -952,6 +952,7 @@ async def create_plan(
         db.close()
 
 
+
 class SavedPlanResponse(BaseModel):
     plan_budget: int
     plan_duration: int
