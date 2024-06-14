@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, status, Depends, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, constr, validator
-from sqlalchemy import create_engine, MetaData, select, Table, Column, Integer, String, ForeignKey, Boolean, DateTime
+from sqlalchemy import create_engine, MetaData, select, Table, Column, Integer, String, ForeignKey, Boolean, DateTime, Float
 from passlib.context import CryptContext
 from dotenv import load_dotenv
 from sqlalchemy.exc import SQLAlchemyError
@@ -650,6 +650,12 @@ async def logout(current_user: str = Depends(get_current_user)):
     """
     return {"message": "Logout successful"}
 
+user_recommendations = Table(
+    'user_recommendations', Base.metadata,
+    Column('user_id', Integer, ForeignKey('users.user_id')),
+    Column('recommendation_id', Integer, ForeignKey('recommendations.id'))
+)
+
 class User(Base):
     __tablename__ = 'users'
     user_id = Column(Integer, primary_key=True)
@@ -660,16 +666,90 @@ class User(Base):
     user_location = Column(String(255))
     user_favs = relationship("UserFavorite", back_populates="user")
     plans = relationship("UserPlan", back_populates="user")
+    recommendations = relationship("Recommendation", secondary=user_recommendations, back_populates="users")
 
+
+class Recommendation(Base):
+    __tablename__ = 'recommendations'
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    price = Column(Float, nullable=False)
+    tags = Column(String(100), nullable=False)
+    governorate = Column(String(100), nullable=False)
+    day = Column(Integer, nullable=False)
+
+    users = relationship("User", secondary=user_recommendations, back_populates="recommendations")
+
+class RecommendationCreate(BaseModel):
+    title: str
+    price: float
+    tags: str
+    governorate: str
+    day: int
+
+
+@app.post("/recommendations/", response_model=RecommendationCreate)
+def create_recommendation(recommendation: RecommendationCreate, current_user_email: str = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.user_email == current_user_email).first()
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        db_recommendation = Recommendation(
+            title=recommendation.title,
+            price=recommendation.price,
+            tags=recommendation.tags,
+            governorate=recommendation.governorate,
+            day=recommendation.day
+        )
+        user.recommendations.append(db_recommendation)
+
+        db.add(db_recommendation)
+        db.commit()
+        db.refresh(db_recommendation)
+
+        return RecommendationCreate(
+            title=db_recommendation.title,
+            price=db_recommendation.price,
+            tags=db_recommendation.tags,
+            governorate=db_recommendation.governorate,
+            day=db_recommendation.day
+        )
+
+    finally:
+        db.close()
+
+
+@app.get("/output_recommendations/", response_model=List[RecommendationCreate])
+def get_recommendations(current_user_email: str = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        recommendations = db.query(Recommendation).filter(
+            Recommendation.users.any(User.user_email == current_user_email)).all()
+
+        recommendations_out = [
+            RecommendationCreate(
+                title=rec.title,
+                price=rec.price,
+                tags=rec.tags,
+                governorate=rec.governorate,
+                day=rec.day
+            )
+            for rec in recommendations
+        ]
+
+        return recommendations_out
+
+    finally:
+        db.close()
 
 class Plan(Base):
     __tablename__ = 'plans'
     plan_id = Column(Integer, primary_key=True)
     plan_budget = Column(Integer, nullable=False)
-    plan_review = Column(String(255))
     plan_duration = Column(Integer, nullable=False)
     destination = Column(String(50), nullable=False)
-    plan_is_recommended = Column(Boolean, nullable=False)
 
     users = relationship("UserPlan", back_populates="plan")
 
@@ -732,10 +812,8 @@ plan_restaurant = Table('plan_restaurant', Base.metadata,
 
 class PlanCreate(BaseModel):
     plan_budget: int
-    plan_review: str = None
     plan_duration: int
     destination: str
-    plan_is_recommended: bool
     restaurant_names: List[str] = []
     hotel_names: List[str] = []
     place_names: List[str] = []
@@ -840,10 +918,8 @@ async def create_plan(
         # Create Plan instance
         plan = Plan(
             plan_budget=plan_data.plan_budget,
-            plan_review=plan_data.plan_review,
             plan_duration=plan_data.plan_duration,
-            destination=destination,
-            plan_is_recommended=plan_data.plan_is_recommended
+            destination=destination
         )
         db.add(plan)
         db.flush()
@@ -878,10 +954,8 @@ async def create_plan(
 
 class SavedPlanResponse(BaseModel):
     plan_budget: int
-    plan_review: Optional[str]
     plan_duration: int
     destination: str
-    plan_is_recommended: bool
     places: List[str] = []
     hotels: List[str] = []
     restaurants: List[str] = []
@@ -898,10 +972,8 @@ async def get_saved_plans(current_user: str = Depends(get_current_user), db: Ses
             for user_plan in user_plans:
                 saved_plan = SavedPlanResponse(
                     plan_budget=user_plan.plan.plan_budget,
-                    plan_review=user_plan.plan.plan_review,
                     plan_duration=user_plan.plan.plan_duration,
-                    destination=user_plan.plan.destination,
-                    plan_is_recommended=user_plan.plan.plan_is_recommended
+                    destination=user_plan.plan.destination
                 )
 
 
@@ -978,9 +1050,8 @@ def delete_favorite_endpoint(
 
 # -------------------------------------------------------------------------
 class SurveyResponse(BaseModel):
-    category: str
+    category: List[str]
 
-# SQLAlchemy models
 class Survey(Base):
     __tablename__ = "surveys"
     survey_id = Column(Integer, primary_key=True, index=True)
@@ -1000,16 +1071,16 @@ async def survey(survey_response: SurveyResponse, current_user_email: str = Depe
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
-        survey = Survey(user_id=user.user_id)  # Using the current user's ID obtained from the database
+        survey = Survey(user_id=user.user_id)
         db.add(survey)
         db.commit()
         db.refresh(survey)
 
-        # Create option entry
-        option = Option(category=survey_response.category, survey_id=survey.survey_id)
-        db.add(option)
+        for category in survey_response.category:
+            option = Option(category=category, survey_id=survey.survey_id)
+            db.add(option)
+
         db.commit()
-        db.refresh(option)
 
         return {"message": "Survey submitted successfully"}
     except Exception as e:
@@ -1017,7 +1088,7 @@ async def survey(survey_response: SurveyResponse, current_user_email: str = Depe
         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
     finally:
         db.close()
-
+        
 @app.get("/out-put survey")
 async def get_user_survey(current_user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
