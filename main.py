@@ -102,8 +102,7 @@ class UserRegistration(BaseModel):
         if errors:
             raise ValueError(", ".join(errors))
         return v
-        
-     @validator("first_name", "last_name", pre=True, always=True)
+    @validator("first_name", "last_name", pre=True, always=True)
      def strip_whitespace(cls, v):
         return v.strip()
 
