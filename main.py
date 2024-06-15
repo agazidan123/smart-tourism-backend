@@ -1105,7 +1105,7 @@ async def survey(survey_response: SurveyResponse, current_user_email: str = Depe
     finally:
         db.close()
         
-@app.get("/out-put survey")
+@app.get("/survey_responses", response_model=List[str])
 async def get_user_survey(current_user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         user = db.query(User).filter(User.user_email == current_user).first()
@@ -1122,9 +1122,9 @@ async def get_user_survey(current_user: str = Depends(get_current_user), db: Ses
 
         categories = [option.category for option in options]
 
-        return {"categories": categories}
+        return categories
     except SQLAlchemyError as e:
-        return {"message": f"Database error: {str(e)}"}
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 
