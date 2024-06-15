@@ -97,11 +97,15 @@ class UserRegistration(BaseModel):
             errors.append("Password must contain at least one lowercase letter")
         if not re.search(r'\d', v):
             errors.append("Password must contain at least one number")
-        if not re.search(r'[@$!%*?&]', v):
-            errors.append("Password must contain at least one special character (@$!%*?&)")
+        if not re.search(r'[@$!%*?&#]', v):
+            errors.append("Password must contain at least one special character (@$!%*?&#)")
         if errors:
             raise ValueError(", ".join(errors))
         return v
+        
+     @validator("first_name", "last_name", pre=True, always=True)
+    def strip_whitespace(cls, v):
+        return v.strip()
 
 class UserLogin(BaseModel):
     user_email: EmailStr
@@ -336,8 +340,8 @@ async def reset_password(user_email: str, new_password: str):
         errors.append("Password must contain at least one lowercase letter")
     if not re.search(r'\d', new_password):
         errors.append("Password must contain at least one number")
-    if not re.search(r'[@$!%*?&]', new_password):
-        errors.append("Password must contain at least one special character (@$!%*?&)")
+    if not re.search(r'[@$!%*?&#]', new_password):
+        errors.append("Password must contain at least one special character (@$!%*?&#)")
     if errors:
         raise HTTPException(status_code=400, detail=", ".join(errors))
 
@@ -510,8 +514,8 @@ async def change_password(current_password: str, new_password: str, current_user
         errors.append("Password must contain at least one lowercase letter")
     if not re.search(r'\d', new_password):
         errors.append("Password must contain at least one number")
-    if not re.search(r'[@$!%*?&]', new_password):
-        errors.append("Password must contain at least one special character (@$!%*?&)")
+    if not re.search(r'[@$!%*?&#]', new_password):
+        errors.append("Password must contain at least one special character (@$!%*?&#)")
     if errors:
         raise HTTPException(status_code=400, detail=", ".join(errors))
 
