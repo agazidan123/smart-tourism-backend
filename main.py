@@ -318,44 +318,54 @@ async def reset_password(user_email: str, new_password: str):
         raise HTTPException(status_code=400, detail="Invalid email format")
 
     email_domain = user_email.split('@')[1]
-
     allowed_domains = ["yahoo.com", "gmail.com", "mail.com", "outlook.com", "hotmail.com"]
     if email_domain not in allowed_domains:
         raise HTTPException(status_code=400, detail="Only Yahoo, Gmail, Mail, Outlook, and Hotmail domains are allowed")
 
     conn = engine.connect()
-    query = select(users.c.user_email).where(users.c.user_email == user_email)
-    result = conn.execute(query).fetchone()
-    conn.close()
 
-    if not result:
-        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        query = select(users.c.user_email).where(users.c.user_email == user_email)
+        result = conn.execute(query).fetchone()
 
-    errors = []
-    if len(new_password) < 8 or len(new_password) > 64:
-        errors.append("Password must be between 8 and 64 characters long")
-    if not re.search(r'[A-Z]', new_password):
-        errors.append("Password must contain at least one uppercase letter")
-    if not re.search(r'[a-z]', new_password):
-        errors.append("Password must contain at least one lowercase letter")
-    if not re.search(r'\d', new_password):
-        errors.append("Password must contain at least one number")
-    if not re.search(r'[@$!%*?&#]', new_password):
-        errors.append("Password must contain at least one special character (@$!%*?&#)")
-    if errors:
-        raise HTTPException(status_code=400, detail=", ".join(errors))
+        if not result:
+            raise HTTPException(status_code=404, detail="User not found")
 
-    # Hash the new password
-    hashed_password = hash_password(new_password)
+        errors = []
+        if len(new_password) < 8 or len(new_password) > 64:
+            errors.append("Password must be between 8 and 64 characters long")
+        if not re.search(r'[A-Z]', new_password):
+            errors.append("Password must contain at least one uppercase letter")
+        if not re.search(r'[a-z]', new_password):
+            errors.append("Password must contain at least one lowercase letter")
+        if not re.search(r'\d', new_password):
+            errors.append("Password must contain at least one number")
+        if not re.search(r'[@$!%*?&#]', new_password):
+            errors.append("Password must contain at least one special character (@$!%*?&#)")
+
+        if errors:
+            raise HTTPException(status_code=400, detail=", ".join(errors))
+
+        hashed_password = hash_password(new_password)
+
+        conn.execute(
+            users.update()
+            .where(users.c.user_email == user_email)
+            .values(user_password=hashed_password)
+        )
+
+        conn.commit()
+
+        return {"message": "Password reset successful"}
+
+    except SQLAlchemyError as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Database error occurred")
+
+    finally:
+        conn.close()
 
 
-    conn = engine.connect()
-    conn.execute(users.update().where(users.c.user_email == user_email).values(
-        user_password=hashed_password
-    ))
-    conn.close()
-
-    return {"message": "Password reset successful"}
 
 def get_db():
     db = SessionLocal()
