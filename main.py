@@ -104,7 +104,7 @@ class UserRegistration(BaseModel):
         return v
         
      @validator("first_name", "last_name", pre=True, always=True)
-    def strip_whitespace(cls, v):
+     def strip_whitespace(cls, v):
         return v.strip()
 
 class UserLogin(BaseModel):
