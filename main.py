@@ -667,7 +667,7 @@ async def logout(current_user: str = Depends(get_current_user)):
 user_recommendations = Table(
     'user_recommendations', Base.metadata,
     Column('user_id', Integer, ForeignKey('users.user_id')),
-    Column('recommendation_id', Integer, ForeignKey('recommendations.id'))
+    Column('recommendation_id', Integer, ForeignKey('Recommendations.Id'))
 )
 
 class User(Base):
@@ -684,22 +684,22 @@ class User(Base):
 
 
 class Recommendation(Base):
-    __tablename__ = 'recommendations'
-    id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(255), nullable=False)
-    price = Column(Float, nullable=False)
-    tags = Column(String(100), nullable=False)
-    governorate = Column(String(100), nullable=False)
-    day = Column(Integer, nullable=False)
+    __tablename__ = 'Recommendations'
+    Id = Column(Integer, primary_key=True, index=True)
+    Title = Column(String(255), nullable=False)
+    Price = Column(Float, nullable=False)
+    Tags = Column(String(100), nullable=False)
+    Governorate = Column(String(100), nullable=False)
+    Day = Column(Integer, nullable=False)
 
     users = relationship("User", secondary=user_recommendations, back_populates="recommendations")
 
 class RecommendationCreate(BaseModel):
-    title: str
-    price: float
-    tags: str
-    governorate: str
-    day: int
+    Title: str
+    Price: float
+    Tags: str
+    Governorate: str
+    Day: int
 
 
 @app.post("/recommendations/", response_model=RecommendationCreate)
@@ -711,11 +711,11 @@ def create_recommendation(recommendation: RecommendationCreate, current_user_ema
             raise HTTPException(status_code=404, detail="User not found")
 
         db_recommendation = Recommendation(
-            title=recommendation.title,
-            price=recommendation.price,
-            tags=recommendation.tags,
-            governorate=recommendation.governorate,
-            day=recommendation.day
+            Title=recommendation.Title,
+            Price=recommendation.Price,
+            Tags=recommendation.Tags,
+            Governorate=recommendation.Governorate,
+            Day=recommendation.Day
         )
         user.recommendations.append(db_recommendation)
 
@@ -724,11 +724,11 @@ def create_recommendation(recommendation: RecommendationCreate, current_user_ema
         db.refresh(db_recommendation)
 
         return RecommendationCreate(
-            title=db_recommendation.title,
-            price=db_recommendation.price,
-            tags=db_recommendation.tags,
-            governorate=db_recommendation.governorate,
-            day=db_recommendation.day
+            Title=db_recommendation.Title,
+            Price=db_recommendation.Price,
+            Tags=db_recommendation.Tags,
+            Governorate=db_recommendation.Governorate,
+            Day=db_recommendation.Day
         )
 
     finally:
@@ -744,11 +744,11 @@ def get_recommendations(current_user_email: str = Depends(get_current_user)):
 
         recommendations_out = [
             RecommendationCreate(
-                title=rec.title,
-                price=rec.price,
-                tags=rec.tags,
-                governorate=rec.governorate,
-                day=rec.day
+                Title=rec.Title,
+                Price=rec.Price,
+                Tags=rec.Tags,
+                Governorate=rec.Governorate,
+                Day=rec.Day
             )
             for rec in recommendations
         ]
