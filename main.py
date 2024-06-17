@@ -1338,6 +1338,24 @@ def create_response(response: ResponseCreate, current_user_email: str = Depends(
         "timestamp": db_response.timestamp
     }
 
+@app.get("/output_questions/", response_model=list[ChatQuestionResponse])
+def get_chat_questions(current_user_email: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.user_email == current_user_email).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    questions = db.query(ChatQuestion).filter(ChatQuestion.user_id == db_user.user_id).all()
+    return questions
+
+@app.get("/output_responses/", response_model=list[ChatResponseResponse])
+def get_chat_responses(current_user_email: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.user_email == current_user_email).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    Responses = db.query(ChatResponse).filter(ChatResponse.user_id == db_user.user_id).all()
+    return Responses
+
 def main():
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
