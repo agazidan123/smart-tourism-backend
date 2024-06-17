@@ -681,6 +681,8 @@ class User(Base):
     user_favs = relationship("UserFavorite", back_populates="user")
     plans = relationship("UserPlan", back_populates="user")
     recommendations = relationship("Recommendation", secondary=user_recommendations, back_populates="users")
+    questions = relationship("ChatQuestion", back_populates="user")
+    responses = relationship("ChatResponse", back_populates="user")
 
 
 class Recommendation(Base):
@@ -1256,6 +1258,85 @@ async def get_discover_hotels(country: str, db: Session = Depends(get_db)):
     ]
 
     return {"random_hotels": result}
+
+class ChatQuestion(Base):
+    __tablename__ = "chat_questions"
+    question_id = Column(Integer, primary_key=True, index=True)
+    question_text = Column(String)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+
+    user = relationship("User", back_populates="questions")
+    responses = relationship("ChatResponse", back_populates="question")
+
+class ChatResponse(Base):
+    __tablename__ = "chat_responses"
+    response_id = Column(Integer, primary_key=True, index=True)
+    question_id = Column(Integer, ForeignKey("chat_questions.question_id"))
+    response_text = Column(String)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("users.user_id"))
+
+    user = relationship("User", back_populates="responses")
+    question = relationship("ChatQuestion", back_populates="responses")
+class QuestionCreate(BaseModel):
+    question_text: str
+
+class ResponseCreate(BaseModel):
+    response_text: str
+
+class ChatQuestionResponse(BaseModel):
+    question_text: str
+    timestamp: datetime
+
+class ChatResponseResponse(BaseModel):
+    response_text: str
+    timestamp: datetime
+@app.post("/chat_questions/", response_model=ChatQuestionResponse)
+def create_question(question: QuestionCreate, current_user_email: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.user_email == current_user_email).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    db_question = ChatQuestion(
+        question_text=question.question_text,
+        user_id=db_user.user_id
+    )
+    db.add(db_question)
+    db.commit()
+    db.refresh(db_question)
+
+
+    return {
+        "question_text": db_question.question_text,
+        "timestamp": db_question.timestamp,
+    }
+
+
+@app.post("/chat_responses/", response_model=ChatResponseResponse)
+def create_response(response: ResponseCreate, current_user_email: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.user_email == current_user_email).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    latest_question = db.query(ChatQuestion).order_by(ChatQuestion.timestamp.desc()).first()
+    if not latest_question:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No questions found")
+
+    db_response = ChatResponse(
+        question_id=latest_question.question_id,
+        response_text=response.response_text,
+        user_id=db_user.user_id,
+        timestamp=datetime.utcnow()
+    )
+    db.add(db_response)
+    db.commit()
+    db.refresh(db_response)
+
+    return {
+        "response_text": db_response.response_text,
+        "timestamp": db_response.timestamp
+    }
 
 def main():
     import uvicorn
