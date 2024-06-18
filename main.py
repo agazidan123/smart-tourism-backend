@@ -311,9 +311,16 @@ async def update(updated_user: UserUpdate, current_user: str = Depends(get_curre
     return {"message": "User updated successfully"}
 
 
+class ResetPasswordRequest(BaseModel):
+    user_email: str
+    new_password: str
+
 
 @app.put("/reset_password")
-async def reset_password(user_email: str , new_password: str):
+async def reset_password(req: ResetPasswordRequest):
+    user_email = req.user_email
+    new_password = req.new_password
+
     if not user_email:
         raise HTTPException(status_code=400, detail="Email is required")
 
@@ -368,8 +375,6 @@ async def reset_password(user_email: str , new_password: str):
         conn.rollback()
         raise HTTPException(status_code=500, detail="Database error occurred")
 
-    finally:
-        conn.close()
 
 def get_db():
     db = SessionLocal()
