@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, status, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, status, Depends, BackgroundTasks, Form
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, constr, validator
 from sqlalchemy import create_engine, MetaData, select, Table, Column, Integer, String, ForeignKey, Boolean, DateTime, Float
@@ -313,7 +313,13 @@ async def update(updated_user: UserUpdate, current_user: str = Depends(get_curre
 
 
 @app.put("/reset_password")
-async def reset_password(user_email: str, new_password: str):
+async def reset_password(user_email: str = Form(None), new_password: str = Form(None)):
+    if not user_email:
+        raise HTTPException(status_code=400, detail="Email is required")
+
+    if not new_password:
+        raise HTTPException(status_code=400, detail="Password is required")
+
     if not re.match(r"[^@]+@[^@]+\.[^@]+", user_email):
         raise HTTPException(status_code=400, detail="Invalid email format")
 
@@ -329,7 +335,7 @@ async def reset_password(user_email: str, new_password: str):
         result = conn.execute(query).fetchone()
 
         if not result:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail="User not found. Please enter the correct email.")
 
         errors = []
         if len(new_password) < 8 or len(new_password) > 64:
