@@ -60,6 +60,8 @@ users = Table(
     Column("user_email", String),
     Column("user_password", String),
     Column("user_location", String),
+    Column("profile_photo", String, nullable=True),
+
 )
 
 metadata.create_all(bind=engine)
