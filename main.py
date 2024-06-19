@@ -874,7 +874,7 @@ def delete_favorite(db: Session, name: str):
         db.commit()
         return {"message": "Favorite deleted successfully"}
     else:
-        raise HTTPException(status_code=404, detail="Favorite not found"
+        raise HTTPException(status_code=404, detail="Favorite not found")
 
 # Database session setup
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
