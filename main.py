@@ -874,7 +874,7 @@ def delete_favorite(db: Session, name: str):
         db.commit()
         return {"message": "Favorite deleted successfully"}
     else:
-        raise HTTPException(status_code=404, detail="Favorite not found")
+        raise HTTPException(status_code=404, detail="Favorite not found"
 
 # Database session setup
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -1057,7 +1057,7 @@ def create_favorite_endpoint(
 
 @app.delete("/favorites/")
 def delete_favorite_endpoint(
-    name: str = Path(..., title="Name of the favorite place"),
+    name: str,
     current_user_email: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
