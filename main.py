@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, status, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, status, Depends, BackgroundTasks,File, UploadFile
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, constr, validator
 from sqlalchemy import create_engine, MetaData, select, Table, Column, Integer, String, ForeignKey, Boolean, DateTime, Float
@@ -32,6 +32,8 @@ import os
 from fastapi import Path
 import random
 import string
+from pathlib import Path
+
 load_dotenv()
 
 app = FastAPI()
@@ -1364,6 +1366,39 @@ def get_chat_responses(current_user_email: str = Depends(get_current_user), db: 
 
     Responses = db.query(ChatResponse).filter(ChatResponse.user_id == db_user.user_id).all()
     return Responses
+
+
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+@app.post("/upload-profile-photo")
+async def upload_profile_photo(
+    token: str = Depends(oauth2_scheme),
+    file: UploadFile = File(...)
+):
+    user_email = get_current_user(token)
+
+    if not user_email:
+        raise HTTPException(status_code=401, detail="Invalid token or user not found")
+
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+
+    file_extension = file.filename.split(".")[-1]
+    file_name = f"{user_email}_{datetime.utcnow().timestamp()}.{file_extension}"
+    file_path = UPLOAD_DIR / file_name
+
+    with open(file_path, "wb") as buffer:
+        buffer.write(await file.read())
+
+    conn = engine.connect()
+    conn.execute(users.update().where(users.c.user_email == user_email).values(
+        profile_photo=str(file_path)
+    ))
+    conn.commit()
+    conn.close()
+
+    return {"message": "Profile photo uploaded successfully", "file_path": str(file_path)}
 
 def main():
     import uvicorn
