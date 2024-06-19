@@ -205,15 +205,15 @@ def delete_user(user_email: str):
 
 
 def update_user(user_email: str, updated_user: UserUpdate):
+    updated_user.first_name = updated_user.first_name.strip()
+    updated_user.last_name = updated_user.last_name.strip()
+
     if not re.match("^(?=.*[a-zA-Z])[a-zA-Z0-9]*$", updated_user.first_name):
         raise HTTPException(status_code=400, detail="First name must contain at least one letter")
-
     if not re.match("^(?=.*[a-zA-Z])[a-zA-Z0-9]*$", updated_user.last_name):
         raise HTTPException(status_code=400, detail="Last name must contain at least one letter")
-
     if len(updated_user.first_name) < 3 or len(updated_user.first_name) > 16:
         raise HTTPException(status_code=400, detail="First name length must be between 3 and 16 characters")
-
     if len(updated_user.last_name) < 3 or len(updated_user.last_name) > 16:
         raise HTTPException(status_code=400, detail="Last name length must be between 3 and 16 characters")
 
