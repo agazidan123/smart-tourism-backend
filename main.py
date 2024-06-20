@@ -1144,8 +1144,8 @@ async def get_user_survey(current_user: str = Depends(get_current_user), db: Ses
 
 
 
-@app.get("/protected")
-async def protected_endpoint(current_user: str = Depends(get_current_user), db: Session = Depends(get_db)):
+@app.get("/user_info")
+async def user_info_endpoint(current_user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         user = db.query(User).filter(User.user_email == current_user).first()
         if user:
