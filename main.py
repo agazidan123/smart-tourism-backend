@@ -690,6 +690,7 @@ class User(Base):
     user_email = Column(String(255), nullable=False)
     user_password = Column(String(255), nullable=False)
     user_location = Column(String(255))
+    profile_photo = Column(String, index=True)
     user_favs = relationship("UserFavorite", back_populates="user")
     plans = relationship("UserPlan", back_populates="user")
     recommendations = relationship("Recommendation", secondary=user_recommendations, back_populates="users")
@@ -1154,7 +1155,8 @@ async def protected_endpoint(current_user: str = Depends(get_current_user), db: 
                     "first_name": user.first_name,
                     "last_name": user.last_name,
                     "email": user.user_email,
-                    "location": user.user_location
+                    "location": user.user_location,
+                    "profile_photo": user.profile_photo
                 }
             }
         else:
