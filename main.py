@@ -676,11 +676,7 @@ async def logout(current_user: str = Depends(get_current_user)):
     """
     return {"message": "Logout successful"}
 
-user_recommendations = Table(
-    'user_recommendations', Base.metadata,
-    Column('user_id', Integer, ForeignKey('users.user_id')),
-    Column('recommendation_id', Integer, ForeignKey('Recommendations.Id'))
-)
+
 
 class User(Base):
     __tablename__ = 'users'
