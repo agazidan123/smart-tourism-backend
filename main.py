@@ -693,85 +693,115 @@ class User(Base):
     profile_photo = Column(String, index=True)
     user_favs = relationship("UserFavorite", back_populates="user")
     plans = relationship("UserPlan", back_populates="user")
-    recommendations = relationship("Recommendation", secondary=user_recommendations, back_populates="users")
+    recommendations = relationship("PlanRecommendation", back_populates="user")
     questions = relationship("ChatQuestion", back_populates="user")
     responses = relationship("ChatResponse", back_populates="user")
 
 
-class Recommendation(Base):
-    __tablename__ = 'Recommendations'
-    Id = Column(Integer, primary_key=True, index=True)
-    Title = Column(String(255), nullable=False)
-    Price = Column(Float, nullable=False)
-    Tags = Column(String(100), nullable=False)
-    Governorate = Column(String(100), nullable=False)
-    Day = Column(Integer, nullable=False)
+class PlanRecommendation(Base):
+    __tablename__ = "PlanRecommendation"
 
-    users = relationship("User", secondary=user_recommendations, back_populates="recommendations")
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    plan_number = Column(Integer)
+    hotel = Column(String(255))
+    hotel_price_per_day = Column(Float)
+    total_hotel_price = Column(Float)
+    total_plan_price = Column(Float)
+    additional_amount_needed = Column(String(255))
 
-class RecommendationCreate(BaseModel):
-    Title: str
-    Price: float
-    Tags: str
-    Governorate: str
-    Day: int
+    user = relationship("User", back_populates="recommendations")
+    recommendations = relationship("PlanRecommendationDetail", back_populates="plan")
 
 
-@app.post("/recommendations/", response_model=RecommendationCreate)
-def create_recommendation(recommendation: RecommendationCreate, current_user_email: str = Depends(get_current_user)):
-    db = SessionLocal()
+class PlanRecommendationDetail(Base):
+    __tablename__ = "PlanRecommendationDetail"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plan_recommendation_id = Column(Integer, ForeignKey("PlanRecommendation.id"))
+    day_number = Column(Integer)
+    recommendation_type = Column(String(50))
+    recommendation_description = Column(String(255))
+    recommendation_price = Column(Float)
+
+    plan = relationship("PlanRecommendation", back_populates="recommendations")
+
+class PlanRecommendationCreate(BaseModel):
+    plan_number: int
+    hotel: str
+    hotel_price_per_day: float
+    total_hotel_price: float
+    total_plan_price: float
+    additional_amount_needed: str
+    plan_recommendations: list[list[str]]
+
+@app.post("/store_plan_recommendation/", status_code=status.HTTP_201_CREATED)
+async def store_plan_recommendation(
+    plan_data: PlanRecommendationCreate,
+    current_user_email: str = Depends(get_current_user)
+):
     try:
+        db = SessionLocal()
+
         user = db.query(User).filter(User.user_email == current_user_email).first()
-        if user is None:
-            raise HTTPException(status_code=404, detail="User not found")
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-        db_recommendation = Recommendation(
-            Title=recommendation.Title,
-            Price=recommendation.Price,
-            Tags=recommendation.Tags,
-            Governorate=recommendation.Governorate,
-            Day=recommendation.Day
+        db_plan = PlanRecommendation(
+            user_id=user.user_id,
+            plan_number=plan_data.plan_number,
+            hotel=plan_data.hotel,
+            hotel_price_per_day=plan_data.hotel_price_per_day,
+            total_hotel_price=plan_data.total_hotel_price,
+            total_plan_price=plan_data.total_plan_price,
+            additional_amount_needed=plan_data.additional_amount_needed
         )
-        user.recommendations.append(db_recommendation)
 
-        db.add(db_recommendation)
+        db.add(db_plan)
         db.commit()
-        db.refresh(db_recommendation)
+        db.refresh(db_plan)
 
-        return RecommendationCreate(
-            Title=db_recommendation.Title,
-            Price=db_recommendation.Price,
-            Tags=db_recommendation.Tags,
-            Governorate=db_recommendation.Governorate,
-            Day=db_recommendation.Day
-        )
+        for day_recommendations in plan_data.plan_recommendations:
+            day_description = day_recommendations[0]
+            recommendations = day_recommendations[1:]
+            for recommendation in recommendations:
+                recommendation_type, recommendation_price = recommendation.split(" → Price: ")
+                db_recommendation = PlanRecommendationDetail(
+                    plan_recommendation_id=db_plan.id,
+                    day_number=db_plan.id,
+                    recommendation_type=recommendation_type.strip(),
+                    recommendation_description=day_description,
+                    recommendation_price=float(recommendation_price.strip())
+                )
+                db.add(db_recommendation)
 
-    finally:
-        db.close()
+        db.commit()
 
+        return {"message": "Plan recommendation stored successfully."}
 
-@app.get("/output_recommendations/", response_model=List[RecommendationCreate])
-def get_recommendations(current_user_email: str = Depends(get_current_user)):
-    db = SessionLocal()
-    try:
-        recommendations = db.query(Recommendation).filter(
-            Recommendation.users.any(User.user_email == current_user_email)).all()
-
-        recommendations_out = [
-            RecommendationCreate(
-                Title=rec.Title,
-                Price=rec.Price,
-                Tags=rec.Tags,
-                Governorate=rec.Governorate,
-                Day=rec.Day
-            )
-            for rec in recommendations
-        ]
-
-        return recommendations_out
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     finally:
         db.close()
+
+       
+class PlanRecommendationDetailResponse(BaseModel):
+    day_number: int
+    recommendation_type: str
+    recommendation_description: str
+    recommendation_price: float
+
+class PlanRecommendationResponse(BaseModel):
+    plan_number: int
+    hotel: str
+    hotel_price_per_day: float
+    total_hotel_price: float
+    total_plan_price: float
+    additional_amount_needed: str
+    plan_recommendations: List[PlanRecommendationDetailResponse]
+
 
 class Plan(Base):
     __tablename__ = 'plans'
@@ -783,7 +813,46 @@ class Plan(Base):
     users = relationship("UserPlan", back_populates="plan")
 
 
+@app.get("/get_plan_recommendations/", response_model=List[PlanRecommendationResponse])
+async def get_plan_recommendations(
+    current_user_email: str = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        user = db.query(User).filter(User.user_email == current_user_email).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
+        plan_recommendations = db.query(PlanRecommendation).filter(PlanRecommendation.user_id == user.user_id).all()
+
+        response_data = []
+        for plan in plan_recommendations:
+            plan_recommendation_details = []
+            for detail in plan.recommendations:
+                detail_response = PlanRecommendationDetailResponse(
+                    day_number=detail.day_number,
+                    recommendation_type=detail.recommendation_type,
+                    recommendation_description=detail.recommendation_description,
+                    recommendation_price=detail.recommendation_price,
+                )
+                plan_recommendation_details.append(detail_response)
+
+            plan_response = PlanRecommendationResponse(
+                plan_number=plan.plan_number,
+                hotel=plan.hotel,
+                hotel_price_per_day=plan.hotel_price_per_day,
+                total_hotel_price=plan.total_hotel_price,
+                total_plan_price=plan.total_plan_price,
+                additional_amount_needed=plan.additional_amount_needed,
+                plan_recommendations=plan_recommendation_details,
+            )
+            response_data.append(plan_response)
+
+        return response_data
+
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        
 class Place(Base):
     __tablename__ = 'places'
     place_id = Column(Integer, primary_key=True)
