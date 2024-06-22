@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, status, Depends, BackgroundTasks,File, UploadFile
+from fastapi import FastAPI, HTTPException, status, Depends, BackgroundTasks,File, UploadFile,Query
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, constr, validator
 from sqlalchemy import create_engine, MetaData, select, Table, Column, Integer, String, ForeignKey, Boolean, DateTime, Float
@@ -858,6 +858,8 @@ class Place(Base):
     place_loc = Column(String(255), nullable=False)
     place_image = Column(String(255), nullable=False)
     rate = Column(Integer)
+    comment = Column(String(255))
+    favorites = relationship("Favorite", secondary='place_favorites', back_populates="places")
 
 class Hotel(Base):
     __tablename__ = 'hotels'
@@ -868,6 +870,8 @@ class Hotel(Base):
     hotel_loc = Column(String(255), nullable=False)
     hotel_image = Column(String(255), nullable=False)
     rate = Column(Integer)
+    comment = Column(String(255))
+    favorites = relationship("Favorite", secondary='hotel_favorites', back_populates="hotels")
 
 class Restaurant(Base):
     __tablename__ = 'restaurants'
@@ -878,6 +882,9 @@ class Restaurant(Base):
     rest_loc = Column(String(255), nullable=False)
     rest_image = Column(String(255), nullable=False)
     rate = Column(Integer)
+    comment = Column(String(255))
+    favorites = relationship("Favorite", secondary='restaurant_favorites', back_populates="restaurants")
+
 
 class UserPlan(Base):
     __tablename__ = 'user_plan'
@@ -918,6 +925,9 @@ class Favorite(Base):
         name = Column(String, nullable=False)
         location = Column(String)
         user_favs = relationship("UserFavorite", back_populates="favorite")
+        places = relationship("Place", secondary='place_favorites', back_populates="favorites")
+        hotels = relationship("Hotel", secondary='hotel_favorites', back_populates="favorites")
+        restaurants = relationship("Restaurant", secondary='restaurant_favorites', back_populates="favorites")
 
 class UserFavorite(Base):
         __tablename__ = "user_fav"
@@ -926,23 +936,67 @@ class UserFavorite(Base):
         user = relationship("User", back_populates="user_favs")
         favorite = relationship("Favorite", back_populates="user_favs")
 
+class PlaceFavorite(Base):
+    __tablename__ = 'place_favorites'
+    place_id = Column(Integer, ForeignKey('places.place_id'), primary_key=True)
+    fav_id = Column(Integer, ForeignKey('favorites.fav_id'), primary_key=True)
+class HotelFavorite(Base):
+    __tablename__ = 'hotel_favorites'
+    hotel_id = Column(Integer, ForeignKey('hotels.hotel_id'), primary_key=True)
+    fav_id = Column(Integer, ForeignKey('favorites.fav_id'), primary_key=True)
+
+class RestaurantFavorite(Base):
+    __tablename__ = 'restaurant_favorites'
+    rest_id = Column(Integer, ForeignKey('restaurants.rest_id'), primary_key=True)
+    fav_id = Column(Integer, ForeignKey('favorites.fav_id'), primary_key=True)
+
 Base.metadata.create_all(bind=engine)
 
-def create_favorite(db: Session, user_id: int, type: str, name: str, location: str):
+def create_favorite(db: Session, user_id: int, type: str, name: str, location: str, place_id: Optional[int] = None,
+                    hotel_id: Optional[int] = None, rest_id: Optional[int] = None):
+    try:
         db_favorite = Favorite(type=type, name=name, location=location)
         db.add(db_favorite)
         db.commit()
         db.refresh(db_favorite)
-        return db_favorite
 
-def delete_favorite(db: Session, name: str):
-    db_favorite = db.query(Favorite).filter(Favorite.name == name).first()
-    if db_favorite:
-        db.delete(db_favorite)
+        user_favorite = UserFavorite(user_id=user_id, fav_id=db_favorite.fav_id)
+        db.add(user_favorite)
+
+        if place_id:
+            place_favorite = PlaceFavorite(place_id=place_id, fav_id=db_favorite.fav_id)
+            db.add(place_favorite)
+        elif hotel_id:
+            hotel_favorite = HotelFavorite(hotel_id=hotel_id, fav_id=db_favorite.fav_id)
+            db.add(hotel_favorite)
+        elif rest_id:
+            restaurant_favorite = RestaurantFavorite(rest_id=rest_id, fav_id=db_favorite.fav_id)
+            db.add(restaurant_favorite)
+
         db.commit()
-        return {"message": "Favorite deleted successfully"}
-    else:
-        raise HTTPException(status_code=404, detail="Favorite not found")
+        return db_favorite
+    except Exception as e:
+        db.rollback()
+        raise e
+
+
+def delete_favorite(db: Session, fav_name: str):
+    try:
+        db_favorite = db.query(Favorite).filter(Favorite.fav_name == fav_name).first()
+        if db_favorite:
+            db.query(UserFavorite).filter(UserFavorite.fav_id == db_favorite.fav_id).delete()
+            db.query(PlaceFavorite).filter(PlaceFavorite.fav_id == db_favorite.fav_id).delete()
+            db.query(HotelFavorite).filter(HotelFavorite.fav_id == db_favorite.fav_id).delete()
+            db.query(RestaurantFavorite).filter(RestaurantFavorite.fav_id == db_favorite.fav_id).delete()
+
+            db.delete(db_favorite)
+            db.commit()
+            return {"message": "Favorite deleted successfully"}
+        else:
+            raise HTTPException(status_code=404, detail="Favorite not found")
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete favorite: {e}")
 
 # Database session setup
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -1094,27 +1148,37 @@ async def get_saved_plans(current_user: str = Depends(get_current_user), db: Ses
         db.close()
 
 
-
 class FavoriteCreate(BaseModel):
     type: str
     name: str
     location: str
+    place_id: Optional[int] = None
+    hotel_id: Optional[int] = None
+    rest_id: Optional[int] = None
+class FavoriteResponse(BaseModel):
+    fav_id: int
+    type: str
+    name: str
+    location: str
+
 @app.post("/favorites/")
 def create_favorite_endpoint(
     favorite_data: FavoriteCreate,
     current_user_email: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Create a favorite for the current user.
-    """
     try:
         user = db.query(User).filter(User.user_email == current_user_email).first()
         if user:
             favorite = create_favorite(
                 db=db,
                 user_id=user.user_id,
-                **favorite_data.dict()
+                type=favorite_data.type,
+                name=favorite_data.name,
+                location=favorite_data.location,
+                place_id=favorite_data.place_id,
+                hotel_id=favorite_data.hotel_id,
+                rest_id=favorite_data.rest_id
             )
             return favorite
         else:
@@ -1123,24 +1187,57 @@ def create_favorite_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to create favorite: {e}")
 
 
+
 @app.delete("/favorites/")
 def delete_favorite_endpoint(
-    name: str,
+    fav_name: str,
     current_user_email: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Delete a favorite for the current user using the favorite name.
+    Delete a favorite for the current user by name.
     """
     try:
         user = db.query(User).filter(User.user_email == current_user_email).first()
         if user:
-            result = delete_favorite(db=db, name=name)
+            result = delete_favorite(db=db, fav_name=fav_name)
             return result
         else:
             raise HTTPException(status_code=404, detail="User not found")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to delete favorite: {e}")
+
+
+@app.get("/favorites/", response_model=List[FavoriteResponse])
+def get_favorites_endpoint(
+    current_user_email: str = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        user = db.query(User).filter(User.user_email == current_user_email).first()
+        if user:
+            user_favorites = db.query(UserFavorite).filter(UserFavorite.user_id == user.user_id).all()
+            favorites = []
+            for user_fav in user_favorites:
+                favorite = db.query(Favorite).filter(Favorite.fav_id == user_fav.fav_id).first()
+                if favorite:
+                    place_fav = db.query(PlaceFavorite).filter(PlaceFavorite.fav_id == favorite.fav_id).first()
+                    hotel_fav = db.query(HotelFavorite).filter(HotelFavorite.fav_id == favorite.fav_id).first()
+                    rest_fav = db.query(RestaurantFavorite).filter(RestaurantFavorite.fav_id == favorite.fav_id).first()
+                    favorites.append(FavoriteResponse(
+                        fav_id=favorite.fav_id,
+                        type=favorite.type,
+                        name=favorite.name,
+                        location=favorite.location,
+                        place_id=place_fav.place_id if place_fav else None,
+                        hotel_id=hotel_fav.hotel_id if hotel_fav else None,
+                        rest_id=rest_fav.rest_id if rest_fav else None
+                    ))
+            return favorites
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get favorites: {e}")
 
 
 
@@ -1236,107 +1333,50 @@ async def unprotected_endpoint():
 
 
 #--------------------------------------------------------
-from sqlalchemy.sql import func
-def query_random_places(db: Session, country: str):
-    random_places = db.query(
-        Place.place_name,
-        Place.price,
-        Place.governorate,
-        Place.place_loc,
-        Place.place_image,
-        Place.rate
-    ).filter(
-        Place.place_loc.ilike(f"%{country}%")
-    ).order_by(
-        func.newid()
-    ).limit(5).all()
-    return random_places
-def query_random_restaurants(db: Session, country: str):
-    random_restaurants = db.query(
-        Restaurant.rest_name,
-        Restaurant.price,
-        Restaurant.governorate,
-        Restaurant.rest_loc,
-        Restaurant.rest_image,
-        Restaurant.rate
-    ).filter(
-        Restaurant.rest_loc.ilike(f"%{country}%")
-    ).order_by(
-        func.newid()
-    ).limit(5).all()
-    return random_restaurants
-def query_random_hotels(db: Session, country: str):
-    random_hotels = db.query(
-        Hotel.hotel_name,
-        Hotel.price,
-        Hotel.governorate,
-        Hotel.hotel_loc,
-        Hotel.hotel_image,
-        Hotel.rate
-
-    ).filter(
-        Hotel.hotel_loc.ilike(f"%{country}%")
-    ).order_by(
-        func.newid()
-    ).limit(5).all()
-    return random_hotels
-
 @app.get("/discover_places/")
-async def get_discover_places(country: str, db: Session = Depends(get_db)):
-    random_places = query_random_places(db, country)
-    if not random_places:
-        raise HTTPException(status_code=404, detail="No random places found for the specified country")
+def get_places(governorate: str = Query(..., description="Governorate name"), db: Session = Depends(get_db)):
+    places = db.query(Place).filter(Place.governorate == governorate).all()
+    if not places:
+        raise HTTPException(status_code=404, detail=f"Governorate '{governorate}' not found.please enter valid governorate")
+    return {"places": places}
 
-    result = [
-        {
-            "place_name": place[0],
-            "price": place[1],
-            "governorate": place[2],
-            "place_loc": place[3],
-            "place_image": place[4],
-            "rate": place[5]
-        } for place in random_places
-    ]
 
-    return {"random_places": result}
+@app.get("/discover_hotels/")
+def get_hotels(governorate: str = Query(..., description="Governorate name"), db: Session = Depends(get_db)):
+    hotels = db.query(Hotel).filter(Hotel.governorate == governorate).all()
+    if not hotels:
+        raise HTTPException(status_code=404, detail=f"Governorate '{governorate}' not found.please enter valid governorate")
+    return {"hotels": hotels}
+
 
 @app.get("/discover_restaurants/")
-async def get_discover_restaurants(country: str, db: Session = Depends(get_db)):
-    random_restaurants = query_random_restaurants(db, country)
-    if not random_restaurants:
-        raise HTTPException(status_code=404, detail="No random restaurants found for the specified country")
+def get_restaurants(governorate: str = Query(..., description="Governorate name"), db: Session = Depends(get_db)):
+    restaurants = db.query(Restaurant).filter(Restaurant.governorate == governorate).all()
+    if not restaurants:
+        raise HTTPException(status_code=404, detail=f"Governorate '{governorate}' not found.please enter valid governorate")
+    return {"restaurants": restaurants}
 
-    result = [
-        {
-            "rest_name": restaurant[0],
-            "price": restaurant[1],
-            "governorate": restaurant[2],
-            "rest_loc": restaurant[3],
-            "rest_image": restaurant[4],
-            "rate": restaurant[5]
-        } for restaurant in random_restaurants
-    ]
+@app.get("/place_details/")
+def get_places(place_name: str = Query(..., description="place name"), db: Session = Depends(get_db)):
+    places = db.query(Place).filter(Place.place_name == place_name).all()
+    if not places:
+        raise HTTPException(status_code=404, detail=f"place name '{place_name}' not found.please enter valid place name")
+    return {"places": places}
 
-    return {"random_restaurants": result}
-@app.get("/discover_hotels/")
-async def get_discover_hotels(country: str, db: Session = Depends(get_db)):
-    random_hotels = query_random_hotels(db, country)
-    if not random_hotels:
-        raise HTTPException(status_code=404, detail="No random hotels found for the specified country")
+@app.get("/hotel_details/")
+def get_hotels(hotel_name: str = Query(..., description="hotel name"), db: Session = Depends(get_db)):
+    hotels = db.query(Hotel).filter(Hotel.hotel_name == hotel_name).all()
+    if not hotels:
+        raise HTTPException(status_code=404, detail=f"hotel name '{hotel_name}' not found.please enter valid hotel name")
+    return {"hotels": hotels}
 
-    result = [
-        {
-            "hotel_name": hotel[0],
-            "price": hotel[1],
-            "governorate": hotel[2],
-            "hotel_loc": hotel[3],
-            "hotel_image": hotel[4],
-            "rate": hotel[5]
 
-        } for hotel in random_hotels
-    ]
-
-    return {"random_hotels": result}
+@app.get("/restaurant_details/")
+def get_restaurants(rest_name: str = Query(..., description="restaurant name"), db: Session = Depends(get_db)):
+    restaurants = db.query(Restaurant).filter(Restaurant.rest_name == rest_name).all()
+    if not restaurants:
+        raise HTTPException(status_code=404, detail=f"restaurant name '{rest_name}' not found.please enter valid restaurant name")
+    return {"restaurants": restaurants}
 
 class ChatQuestion(Base):
     __tablename__ = "chat_questions"
