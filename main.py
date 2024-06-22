@@ -406,7 +406,7 @@ class SearchParams(BaseModel):
     name: Optional[str] = "string"
 
 
-from sqlalchemy import or_
+from sqlalchemy import or_,and_
 
 
 @app.post("/search")
@@ -439,30 +439,43 @@ async def search(
                 db.delete(search_to_delete)
             db.commit()
 
-        # Search in all three tables for matching results
+        # Search in all three tables for matching results based on parameters
         search_results = db.query(Hotel).filter(
-            or_(
-                Hotel.hotel_loc.ilike(f"%{search_params.name}%"),
-                Hotel.hotel_name.ilike(f"%{search_params.name}%")
+            and_(
+                Hotel.hotel_loc.ilike(f"%{search_params.country}%"),
+                Hotel.governorate.ilike(f"%{search_params.governorate}%"),
+                or_(
+                    Hotel.hotel_name.ilike(f"%{search_params.name}%"),
+                    Hotel.hotel_loc.ilike(f"%{search_params.name}%")
+                )
             )
         ).all()
+
         search_results += db.query(Place).filter(
-            or_(
-                Place.place_loc.ilike(f"%{search_params.name}%"),
-                Place.place_name.ilike(f"%{search_params.name}%")
+            and_(
+                Place.place_loc.ilike(f"%{search_params.country}%"),
+                Place.governorate.ilike(f"%{search_params.governorate}%"),
+                or_(
+                    Place.place_name.ilike(f"%{search_params.name}%"),
+                    Place.place_loc.ilike(f"%{search_params.name}%")
+                )
             )
         ).all()
+
         search_results += db.query(Restaurant).filter(
-            or_(
-                Restaurant.rest_loc.ilike(f"%{search_params.name}%"),
-                Restaurant.rest_name.ilike(f"%{search_params.name}%")
+            and_(
+                Restaurant.rest_loc.ilike(f"%{search_params.country}%"),
+                Restaurant.governorate.ilike(f"%{search_params.governorate}%"),
+                or_(
+                    Restaurant.rest_name.ilike(f"%{search_params.name}%"),
+                    Restaurant.rest_loc.ilike(f"%{search_params.name}%")
+                )
             )
         ).all()
 
         if not search_results:
             return {"message": "No matching results found."}
 
-        # Transforming the results into dictionaries
         results = []
         for item in search_results:
             if isinstance(item, Hotel):
@@ -473,8 +486,8 @@ async def search(
                     "governorate": item.governorate,
                     "country": item.hotel_loc,
                     "image": item.hotel_image,
-                    "rate": item.rate
-
+                    "rate": item.rate,
+                    "comment": item.comment
                 })
             elif isinstance(item, Place):
                 results.append({
@@ -484,7 +497,8 @@ async def search(
                     "governorate": item.governorate,
                     "country": item.place_loc,
                     "image": item.place_image,
-                    "rate": item.rate
+                    "rate": item.rate,
+                    "comment": item.comment
                 })
             elif isinstance(item, Restaurant):
                 results.append({
@@ -494,8 +508,8 @@ async def search(
                     "governorate": item.governorate,
                     "country": item.rest_loc,
                     "image": item.rest_image,
-                    "rate": item.rate
-
+                    "rate": item.rate,
+                    "comment": item.comment
                 })
 
         return {"results": results}
