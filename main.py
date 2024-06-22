@@ -994,9 +994,9 @@ def create_favorite(db: Session, user_id: int, type: str, name: str, location: s
         raise e
 
 
-def delete_favorite(db: Session, fav_name: str):
+def delete_favorite(db: Session, fav_id: int):
     try:
-        db_favorite = db.query(Favorite).filter(Favorite.fav_name == fav_name).first()
+        db_favorite = db.query(Favorite).filter(Favorite.fav_id == fav_id).first()
         if db_favorite:
             db.query(UserFavorite).filter(UserFavorite.fav_id == db_favorite.fav_id).delete()
             db.query(PlaceFavorite).filter(PlaceFavorite.fav_id == db_favorite.fav_id).delete()
@@ -1011,9 +1011,6 @@ def delete_favorite(db: Session, fav_name: str):
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete favorite: {e}")
-
-# Database session setup
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def get_db():
     db = SessionLocal()
@@ -1204,17 +1201,17 @@ def create_favorite_endpoint(
 
 @app.delete("/favorites/")
 def delete_favorite_endpoint(
-    fav_name: str,
+    fav_id: int,
     current_user_email: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Delete a favorite for the current user by name.
+    Delete a favorite for the current user by ID.
     """
     try:
         user = db.query(User).filter(User.user_email == current_user_email).first()
         if user:
-            result = delete_favorite(db=db, fav_name=fav_name)
+            result = delete_favorite(db=db, fav_id=fav_id)
             return result
         else:
             raise HTTPException(status_code=404, detail="User not found")
@@ -1347,27 +1344,30 @@ async def unprotected_endpoint():
 
 
 #--------------------------------------------------------
+def get_random_entities(entity, governorate, db: Session, limit=10):
+    entities = db.query(entity).filter(entity.governorate == governorate).all()
+    if not entities:
+        raise HTTPException(status_code=404,
+                            detail=f"Governorate '{governorate}' not found. Please enter a valid governorate.")
+
+    if len(entities) > limit:
+        entities = random.sample(entities, limit)
+    return entities
+
 @app.get("/discover_places/")
 def get_places(governorate: str = Query(..., description="Governorate name"), db: Session = Depends(get_db)):
-    places = db.query(Place).filter(Place.governorate == governorate).all()
-    if not places:
-        raise HTTPException(status_code=404, detail=f"Governorate '{governorate}' not found.please enter valid governorate")
+    places = get_random_entities(Place, governorate, db)
     return {"places": places}
-
 
 @app.get("/discover_hotels/")
 def get_hotels(governorate: str = Query(..., description="Governorate name"), db: Session = Depends(get_db)):
-    hotels = db.query(Hotel).filter(Hotel.governorate == governorate).all()
-    if not hotels:
-        raise HTTPException(status_code=404, detail=f"Governorate '{governorate}' not found.please enter valid governorate")
+    hotels = get_random_entities(Hotel, governorate, db)
     return {"hotels": hotels}
 
 
 @app.get("/discover_restaurants/")
 def get_restaurants(governorate: str = Query(..., description="Governorate name"), db: Session = Depends(get_db)):
-    restaurants = db.query(Restaurant).filter(Restaurant.governorate == governorate).all()
-    if not restaurants:
-        raise HTTPException(status_code=404, detail=f"Governorate '{governorate}' not found.please enter valid governorate")
+    restaurants = get_random_entities(Restaurant, governorate, db)
     return {"restaurants": restaurants}
 
 @app.get("/place_details/")
