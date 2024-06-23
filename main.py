@@ -32,6 +32,7 @@ import os
 import random
 import string
 from pathlib import Path
+from fastapi.responses import FileResponse
 
 load_dotenv()
 
@@ -1494,33 +1495,35 @@ UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 @app.post("/upload-profile-photo")
-async def upload_profile_photo(
-    token: str = Depends(oauth2_scheme),
-    file: UploadFile = File(...)
-):
-    user_email = get_current_user(token)
-
-    if not user_email:
-        raise HTTPException(status_code=401, detail="Invalid token or user not found")
-
+async def upload_profile_photo(file: UploadFile = File(...), current_user: str = Depends(get_current_user)):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
 
-    file_extension = file.filename.split(".")[-1]
-    file_name = f"{user_email}_{datetime.utcnow().timestamp()}.{file_extension}"
-    file_path = UPLOAD_DIR / file_name
+    file_path = UPLOAD_DIR / file.filename
 
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
 
+    file_url = f"/uploads/{file.filename}"
+
     conn = engine.connect()
-    conn.execute(users.update().where(users.c.user_email == user_email).values(
-        profile_photo=str(file_path)
-    ))
+    conn.execute(users.update().where(users.c.user_email == current_user).values(profile_photo=file_url))
     conn.commit()
     conn.close()
 
-    return {"message": "Profile photo uploaded successfully", "file_path": str(file_path)}
+    return {
+        "message": "Profile photo uploaded successfully",
+        "file_name": file.filename,
+        "file_url": file_url
+    }
+
+@app.get("/uploads/{file_name}")
+async def serve_file(file_name: str):
+    file_path = UPLOAD_DIR / file_name
+    if file_path.exists():
+        return FileResponse(file_path)
+    else:
+        raise HTTPException(status_code=404, detail="File not found")
 
 def main():
     import uvicorn
