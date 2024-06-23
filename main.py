@@ -744,58 +744,55 @@ class PlanRecommendationCreate(BaseModel):
     total_hotel_price: float
     total_plan_price: float
     additional_amount_needed: str
-    plan_recommendations: list[list[str]]
+    plan_recommendations: List[str]
 
-@app.post("/store_plan_recommendation/", status_code=status.HTTP_201_CREATED)
+@app.post("/store_plan_recommendation/", status_code=status.HTTP_200_OK)
 async def store_plan_recommendation(
     plan_data: PlanRecommendationCreate,
     current_user_email: str = Depends(get_current_user)
 ):
     try:
-        db = SessionLocal()
+        with SessionLocal() as db:
+            user = db.query(User).filter(User.user_email == current_user_email).first()
+            if not user:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-        user = db.query(User).filter(User.user_email == current_user_email).first()
-        if not user:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+            db_plan = PlanRecommendation(
+                user_id=user.user_id,
+                plan_number=plan_data.plan_number,
+                hotel=plan_data.hotel,
+                hotel_price_per_day=plan_data.hotel_price_per_day,
+                total_hotel_price=plan_data.total_hotel_price,
+                total_plan_price=plan_data.total_plan_price,
+                additional_amount_needed=plan_data.additional_amount_needed
+            )
 
-        db_plan = PlanRecommendation(
-            user_id=user.user_id,
-            plan_number=plan_data.plan_number,
-            hotel=plan_data.hotel,
-            hotel_price_per_day=plan_data.hotel_price_per_day,
-            total_hotel_price=plan_data.total_hotel_price,
-            total_plan_price=plan_data.total_plan_price,
-            additional_amount_needed=plan_data.additional_amount_needed
-        )
+            db.add(db_plan)
+            db.commit()
+            db.refresh(db_plan)
 
-        db.add(db_plan)
-        db.commit()
-        db.refresh(db_plan)
+            day_number = 0
+            for line in plan_data.plan_recommendations:
+                if line.startswith("Day "):
+                    day_number += 1
+                    day_description = line
+                else:
+                    recommendation_type, recommendation_price = line.split(" → Price: ")
+                    db_recommendation = PlanRecommendationDetail(
+                        plan_recommendation_id=db_plan.id,
+                        day_number=day_number,
+                        recommendation_type=recommendation_type.split(":")[0].strip(),
+                        recommendation_description=day_description,
+                        recommendation_price=float(recommendation_price.strip())
+                    )
+                    db.add(db_recommendation)
 
-        for day_recommendations in plan_data.plan_recommendations:
-            day_description = day_recommendations[0]
-            recommendations = day_recommendations[1:]
-            for recommendation in recommendations:
-                recommendation_type, recommendation_price = recommendation.split(" → Price: ")
-                db_recommendation = PlanRecommendationDetail(
-                    plan_recommendation_id=db_plan.id,
-                    day_number=db_plan.id,
-                    recommendation_type=recommendation_type.strip(),
-                    recommendation_description=day_description,
-                    recommendation_price=float(recommendation_price.strip())
-                )
-                db.add(db_recommendation)
+            db.commit()
 
-        db.commit()
-
-        return {"message": "Plan recommendation stored successfully."}
+            return {"message": "Plan recommendation stored successfully."}
 
     except Exception as e:
-        db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-    finally:
-        db.close()
 
        
 class PlanRecommendationDetailResponse(BaseModel):
