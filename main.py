@@ -1131,43 +1131,37 @@ class SavedPlanResponse(BaseModel):
     plan_budget: int
     plan_duration: int
     destination: str
-    places: List[str] = []
-    hotels: List[str] = []
-    restaurants: List[str] = []
+    restaurant_names: List[str] = []
+    hotel_names: List[str] = []
+    place_names: List[str] = []
 
 
-@app.get("/history plans")
+@app.get("/history plans", response_model=List[SavedPlanResponse])
 async def get_saved_plans(current_user: str = Depends(get_current_user), db: Session = Depends(get_db)):
     try:
         user = db.query(User).filter(User.user_email == current_user).first()
-        if user:
-            user_plans = db.query(UserPlan).join(Plan).options(joinedload(UserPlan.plan)).filter(UserPlan.user_id == user.user_id).all()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
 
-            saved_plans_response = []
-            for user_plan in user_plans:
-                saved_plan = SavedPlanResponse(
-                    plan_budget=user_plan.plan.plan_budget,
-                    plan_duration=user_plan.plan.plan_duration,
-                    destination=user_plan.plan.destination,
-                )
+        user_plans = db.query(UserPlan).join(Plan).options(joinedload(UserPlan.plan)).filter(UserPlan.user_id == user.user_id).all()
 
+        saved_plans_response = []
+        for user_plan in user_plans:
+            places = db.query(Place.place_name).join(plan_place).filter(plan_place.c.plan_id == user_plan.plan_id).all()
+            hotels = db.query(Hotel.hotel_name).join(plan_hotel).filter(plan_hotel.c.plan_id == user_plan.plan_id).all()
+            restaurants = db.query(Restaurant.rest_name).join(plan_restaurant).filter(plan_restaurant.c.plan_id == user_plan.plan_id).all()
 
-                places = db.query(Place.place_name).join(plan_place).filter(plan_place.c.plan_id == user_plan.plan_id).all()
-                saved_plan.places = [place[0] for place in places]
+            saved_plan = SavedPlanResponse(
+                plan_budget=user_plan.plan.plan_budget,
+                plan_duration=user_plan.plan.plan_duration,
+                destination=user_plan.plan.destination,
+                place_names=[place[0] for place in places],
+                hotel_names=[hotel[0] for hotel in hotels],
+                restaurant_names=[restaurant[0] for restaurant in restaurants]
+            )
+            saved_plans_response.append(saved_plan)
 
-
-                hotels = db.query(Hotel.hotel_name).join(plan_hotel).filter(plan_hotel.c.plan_id == user_plan.plan_id).all()
-                saved_plan.hotels = [hotel[0] for hotel in hotels]
-
-
-                restaurants = db.query(Restaurant.rest_name).join(plan_restaurant).filter(plan_restaurant.c.plan_id == user_plan.plan_id).all()
-                saved_plan.restaurants = [restaurant[0] for restaurant in restaurants]
-
-                saved_plans_response.append(saved_plan)
-
-            return {"user_plans": saved_plans_response}
-        else:
-            return {"message": "User not found."}
+        return saved_plans_response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch user plans: {e}")
     finally:
