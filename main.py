@@ -778,7 +778,13 @@ async def store_plan_recommendation(
                     day_description = line
                 else:
                     try:
-                        recommendation_type, recommendation_price = line.split(" → Price: ")
+                        if " → Price: " in line:
+                            recommendation_type, recommendation_price = line.split(" → Price: ")
+                        elif ", Price: " in line:
+                            recommendation_type, recommendation_price = line.split(", Price: ")
+                        else:
+                            raise ValueError("Invalid format")
+
                         recommendation_type = recommendation_type.split(":")[1].strip()
                         db_recommendation = PlanRecommendationDetail(
                             plan_recommendation_id=db_plan.id,
@@ -802,6 +808,7 @@ async def store_plan_recommendation(
 
 
 
+
        
 class PlanRecommendationDetailResponse(BaseModel):
     day_number: int
@@ -816,7 +823,8 @@ class PlanRecommendationResponse(BaseModel):
     total_hotel_price: float
     total_plan_price: float
     additional_amount_needed: str
-    plan_recommendations: List[PlanRecommendationDetailResponse]
+    plan_recommendations: List[str]
+
 
 
 class Plan(Base):
@@ -843,15 +851,14 @@ async def get_plan_recommendations(
 
         response_data = []
         for plan in plan_recommendations:
-            plan_recommendation_details = []
+            plan_recommendation_strings = []
+            current_day_description = ""
             for detail in plan.recommendations:
-                detail_response = PlanRecommendationDetailResponse(
-                    day_number=detail.day_number,
-                    recommendation_type=detail.recommendation_type,
-                    recommendation_description=detail.recommendation_description,
-                    recommendation_price=detail.recommendation_price,
-                )
-                plan_recommendation_details.append(detail_response)
+                if current_day_description != detail.recommendation_description:
+                    current_day_description = detail.recommendation_description
+                    plan_recommendation_strings.append(current_day_description)
+                recommendation_string = f"{detail.recommendation_type}: {detail.recommendation_description} → Price: {detail.recommendation_price}"
+                plan_recommendation_strings.append(recommendation_string)
 
             plan_response = PlanRecommendationResponse(
                 plan_number=plan.plan_number,
@@ -860,7 +867,7 @@ async def get_plan_recommendations(
                 total_hotel_price=plan.total_hotel_price,
                 total_plan_price=plan.total_plan_price,
                 additional_amount_needed=plan.additional_amount_needed,
-                plan_recommendations=plan_recommendation_details,
+                plan_recommendations=plan_recommendation_strings,
             )
             response_data.append(plan_response)
 
@@ -868,6 +875,7 @@ async def get_plan_recommendations(
 
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
         
 class Place(Base):
     __tablename__ = 'places'
