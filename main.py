@@ -857,7 +857,7 @@ async def get_plan_recommendations(
                 if current_day_description != detail.recommendation_description:
                     current_day_description = detail.recommendation_description
                     plan_recommendation_strings.append(current_day_description)
-                recommendation_string = f"{detail.recommendation_type}: {detail.recommendation_description} → Price: {detail.recommendation_price}"
+                recommendation_string = f"{detail.recommendation_type}: {detail.recommendation_description}, Price: {detail.recommendation_price}"
                 plan_recommendation_strings.append(recommendation_string)
 
             plan_response = PlanRecommendationResponse(
@@ -875,6 +875,7 @@ async def get_plan_recommendations(
 
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
         
 class Place(Base):
