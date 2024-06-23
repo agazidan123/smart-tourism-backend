@@ -777,28 +777,20 @@ async def store_plan_recommendation(
                     day_number += 1
                     day_description = line
                 else:
-                    if " → Price: " in line:
-                        try:
-                            recommendation_type, recommendation_price = line.split(" → Price: ")
-                            recommendation_type = recommendation_type.split(":")[1].strip()
-                            db_recommendation = PlanRecommendationDetail(
-                                plan_recommendation_id=db_plan.id,
-                                day_number=day_number,
-                                recommendation_type=recommendation_type,
-                                recommendation_description=day_description,
-                                recommendation_price=float(recommendation_price.strip())
-                            )
-                            db.add(db_recommendation)
-                        except ValueError as e:
-                            raise HTTPException(
-                                status_code=status.HTTP_400_BAD_REQUEST,
-                                detail=f"Invalid format for recommendation: {line}. Error: {str(e)}"
-                            )
-                    else:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Invalid format for recommendation: {line}"
+                    try:
+                        recommendation_type, recommendation_price = line.split(" → Price: ")
+                        recommendation_type = recommendation_type.split(":")[1].strip()
+                        db_recommendation = PlanRecommendationDetail(
+                            plan_recommendation_id=db_plan.id,
+                            day_number=day_number,
+                            recommendation_type=recommendation_type,
+                            recommendation_description=day_description,
+                            recommendation_price=float(recommendation_price.strip())
                         )
+                        db.add(db_recommendation)
+                    except Exception as e:
+                        # Log the error and skip this line
+                        print(f"Failed to process line: {line}. Error: {e}")
 
             db.commit()
 
@@ -806,6 +798,7 @@ async def store_plan_recommendation(
 
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 
 
