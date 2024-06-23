@@ -777,15 +777,22 @@ async def store_plan_recommendation(
                     day_number += 1
                     day_description = line
                 else:
-                    recommendation_type, recommendation_price = line.split(" → Price: ")
-                    db_recommendation = PlanRecommendationDetail(
-                        plan_recommendation_id=db_plan.id,
-                        day_number=day_number,
-                        recommendation_type=recommendation_type.split(":")[0].strip(),
-                        recommendation_description=day_description,
-                        recommendation_price=float(recommendation_price.strip())
-                    )
-                    db.add(db_recommendation)
+                    try:
+                        recommendation_type, recommendation_price = line.split(" → Price: ")
+                        recommendation_type = recommendation_type.split(":")[1].strip()
+                        db_recommendation = PlanRecommendationDetail(
+                            plan_recommendation_id=db_plan.id,
+                            day_number=day_number,
+                            recommendation_type=recommendation_type,
+                            recommendation_description=day_description,
+                            recommendation_price=float(recommendation_price.strip())
+                        )
+                        db.add(db_recommendation)
+                    except ValueError:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Invalid format for recommendation: {line}"
+                        )
 
             db.commit()
 
@@ -793,6 +800,7 @@ async def store_plan_recommendation(
 
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
        
 class PlanRecommendationDetailResponse(BaseModel):
