@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, status, Depends, BackgroundTasks,File, UploadFile,Query
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, EmailStr, constr, validator
-from sqlalchemy import create_engine, MetaData, select, Table, Column, Integer, String, ForeignKey, Boolean, DateTime, Float
+from sqlalchemy import create_engine, MetaData, select, Table, Column, Integer, String, ForeignKey, Boolean, DateTime, Float,Text
 from passlib.context import CryptContext
 from dotenv import load_dotenv
 from sqlalchemy.exc import SQLAlchemyError
@@ -707,6 +707,8 @@ class User(Base):
     recommendations = relationship("PlanRecommendation", back_populates="user")
     questions = relationship("ChatQuestion", back_populates="user")
     responses = relationship("ChatResponse", back_populates="user")
+    notes = relationship("UserNote", back_populates="user")
+
 
 
 class PlanRecommendation(Base):
@@ -1532,6 +1534,77 @@ async def serve_file(file_name: str):
         return FileResponse(file_path)
     else:
         raise HTTPException(status_code=404, detail="File not found")
+
+
+
+class UserNote(Base):
+    __tablename__ = "userNotes"
+    Id = Column(Integer, primary_key=True, index=True)
+    Title = Column(String(100), nullable=False)
+    Content = Column(Text)
+    CreatedAt = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey('users.user_id'))
+    user = relationship("User", back_populates="notes")
+
+class NoteCreate(BaseModel):
+    Title: str
+    Content: str
+
+class NoteResponse(BaseModel):
+    Id: int
+    Title: str
+    Content: str
+    CreatedAt: datetime
+    user_id: int
+
+def get_user_by_email(email: str, db: Session):
+    if email is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    db_user = db.query(User).filter(User.user_email == email).first()
+    if not db_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return db_user
+
+
+
+@app.post("/notes/", response_model=NoteResponse)
+def create_note(note: NoteCreate, current_user_email: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = get_user_by_email(current_user_email, db)
+
+    db_note = UserNote(
+        Title=note.Title,
+        Content=note.Content,
+        user_id=db_user.user_id
+    )
+
+    db.add(db_note)
+    db.commit()
+    db.refresh(db_note)
+
+    return db_note
+
+
+@app.get("/get_notes/", response_model=List[NoteResponse])
+def get_user_notes(current_user_email: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = get_user_by_email(current_user_email, db)
+
+    notes = db.query(UserNote).filter(UserNote.user_id == db_user.user_id).all()
+
+    return notes
+
+
+@app.delete("/delete_notes/", response_model=dict)
+def delete_note(note_id: int, current_user_email: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = get_user_by_email(current_user_email, db)
+
+    note = db.query(UserNote).filter(UserNote.Id == note_id, UserNote.user_id == db_user.user_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="Note not found")
+
+    db.delete(note)
+    db.commit()
+
+    return {"message": "Note deleted successfully"}
 
 def main():
     import uvicorn
